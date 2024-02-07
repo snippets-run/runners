@@ -7,5 +7,12 @@
   },
   "bin": {
     "run": "./run.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/snippets-run/runners.git"
   }
 }
