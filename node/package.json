@@ -1,6 +1,10 @@
 {
   "name": "@snippets.run/node",
   "version": "0.0.0",
+  "scripts": {
+    "test": "echo true",
+    "build": "echo true"
+  },
   "bin": {
     "run": "./run.mjs"
   }

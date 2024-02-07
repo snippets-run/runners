@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { createInterface } from "node:readline/promises";
 import { createHash } from "node:crypto";
 import { mkdtemp, writeFile } from "node:fs/promises";
