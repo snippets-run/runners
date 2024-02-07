@@ -1,0 +1,7 @@
+{
+  "name": "@snippets.run/node",
+  "version": "0.0.0",
+  "bin": {
+    "run": "./run.mjs"
+  }
+}

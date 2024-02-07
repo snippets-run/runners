@@ -1,0 +1,72 @@
+import { createInterface } from "node:readline/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { spawn } from "node:child_process";
+
+const templateRe = /\$\{([\s\S]+?)\}/g;
+const rl = createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
+
+async function getSnippet(name) {
+  const response = await fetch("https://registry.snippets.run/s/node/" + name);
+  if (!response.ok || response.status > 299) {
+    throw new Error(response.statusText);
+  }
+
+  return response.json();
+}
+
+async function getInputs(inputs) {
+  if (!inputs || !inputs.length) {
+    return {};
+  }
+
+  const values = new Map();
+  for (const input of inputs) {
+    values[input.name] = await rl.question(
+      `${input.description || input.name}:\n> `
+    );
+  }
+
+  return values;
+}
+
+function showHelp() {
+  console.log(`
+How to use:
+  run                     Shows this message
+  run <snippet-name>      Download and run <snippet-name>
+`);
+  process.exit(1);
+}
+
+(async () => {
+  const name = process.argv[2];
+
+  if (!name) {
+    showHelp();
+  }
+
+  try {
+    const { script, inputs } = await getSnippet(name);
+    const replacements = await getInputs(inputs);
+    const code = script.replace(
+      templateRe,
+      (_, input) => replacements.get(input.trim()) || ""
+    );
+    const nodePath = process.argv[0];
+    const filePath = join(
+      await mkdtemp("run"),
+      createHash("sha256").update(name).digest("hex")
+    );
+
+    await writeFile(filePath, code);
+    spawn(nodePath, [filePath], { stdio: "inherit" });
+  } catch (error) {
+    process.stderr.write(String(error));
+    process.exit(1);
+  }
+})();
