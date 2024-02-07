@@ -60,13 +60,13 @@ How to use:
       (_, input) => replacements.get(input.trim()) || ""
     );
     const nodePath = process.argv[0];
-    const filePath = join(
-      await mkdtemp("run"),
-      createHash("sha256").update(name).digest("hex")
-    );
+    const tmpPath = await mkdtemp("run");
+    const hash = createHash("sha256").update(name).digest("hex");
+    const filePath = join(tmpPath, hash);
 
     await writeFile(filePath, code);
-    spawn(nodePath, [filePath], { stdio: "inherit" });
+    const p = spawn(nodePath, [filePath], { stdio: "inherit" });
+    p.on("exit", (c) => process.exit(c));
   } catch (error) {
     process.stderr.write(String(error));
     process.exit(1);
