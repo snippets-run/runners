@@ -60,7 +60,8 @@ How to use:
     );
     const nodePath = process.argv[0];
     const hash = createHash("sha256").update(name).digest("hex");
-    const filePath = `/tmp/${hash + ".js"}`;
+    const tmpDir = process.env.TMPDIR || "/tmp";
+    const filePath = `${tmpDir}/${hash + ".js"}`;
 
     await writeFile(filePath, code);
     const p = spawn(nodePath, [filePath], { stdio: "inherit" });
