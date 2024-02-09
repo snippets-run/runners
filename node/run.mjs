@@ -2,8 +2,7 @@
 
 import { createInterface } from "node:readline/promises";
 import { createHash } from "node:crypto";
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 
 const templateRe = /\$\{([\s\S]+?)\}/g;
@@ -60,9 +59,8 @@ How to use:
       (_, input) => replacements.get(input.trim()) || ""
     );
     const nodePath = process.argv[0];
-    const tmpPath = await mkdtemp("run");
     const hash = createHash("sha256").update(name).digest("hex");
-    const filePath = join(tmpPath, hash);
+    const filePath = `/tmp/${hash + ".js"}`;
 
     await writeFile(filePath, code);
     const p = spawn(nodePath, [filePath], { stdio: "inherit" });
