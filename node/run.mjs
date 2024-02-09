@@ -5,12 +5,6 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 
-const templateRe = /\$\{([\s\S]+?)\}/g;
-const rl = createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
-
 async function getSnippet(name) {
   const response = await fetch("https://registry.snippets.run/s/node/" + name);
   if (!response.ok || response.status > 299) {
@@ -26,6 +20,11 @@ async function getInputs(inputs) {
   }
 
   const values = new Map();
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
   for (const input of inputs) {
     values[input.name] = await rl.question(
       `${input.description || input.name}:\n> `
@@ -54,17 +53,24 @@ How to use:
   try {
     const { script, inputs } = await getSnippet(name);
     const replacements = await getInputs(inputs);
+    const templateRe = /\$\{([\s\S]+?)\}/g;
     const code = script.replace(
       templateRe,
-      (_, input) => replacements.get(input.trim()) || ""
+      (_, input) => replacements.get(input.trim()) || input
     );
     const nodePath = process.argv[0];
     const hash = createHash("sha256").update(name).digest("hex");
     const tmpDir = process.env.TMPDIR || "/tmp";
     const filePath = `${tmpDir}/${hash + ".js"}`;
-
+    const env = {
+      ...process.env,
+      SNIPPETS_REGISTRY: "https://registry.snippets.run",
+    };
     await writeFile(filePath, code);
-    const p = spawn(nodePath, [filePath], { stdio: "inherit" });
+    const p = spawn(nodePath, [filePath, ...process.argv.slice(3)], {
+      stdio: "inherit",
+      env,
+    });
     p.on("exit", (c) => process.exit(c));
   } catch (error) {
     process.stderr.write(String(error));
