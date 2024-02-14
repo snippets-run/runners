@@ -5,6 +5,35 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 
+const hasPipedInput = !process.stdin.isTTY;
+
+function parseArgs() {
+  const argv = process.argv.slice(3);
+  const options = {};
+  const args = [];
+  let flag = "";
+
+  for (const next of argv) {
+    if (next.startsWith("--")) {
+      if (flag) {
+        options[flag] = true;
+      }
+
+      flag = next.slice(2);
+      continue;
+    }
+
+    if (flag) {
+      options[flag] = next;
+      flag = "";
+    } else {
+      args.push(next);
+    }
+  }
+
+  return { args, options };
+}
+
 async function getSnippet(name) {
   const response = await fetch("https://registry.snippets.run/s/node/" + name);
   if (!response.ok || response.status > 299) {
@@ -14,21 +43,28 @@ async function getSnippet(name) {
   return response.json();
 }
 
-async function getInputs(inputs) {
-  if (!inputs || !inputs.length) {
-    return {};
+async function getInputs(inputs, cliOptions) {
+  const values = new Map();
+
+  if (!inputs?.length) {
+    return values;
   }
 
-  const values = new Map();
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
+  const rl =
+    !hasPipedInput &&
+    createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
 
   for (const input of inputs) {
-    values[input.name] = await rl.question(
-      `${input.description || input.name}:\n> `
-    );
+    const value =
+      cliOptions[input.name] ||
+      (hasPipedInput
+        ? ""
+        : await rl.question(`${input.description || input.name}:\n> `));
+
+    values.set(input.name, value);
   }
 
   return values;
@@ -44,6 +80,7 @@ How to use:
 }
 
 (async () => {
+  const { args, options } = parseArgs();
   const name = process.argv[2];
 
   if (!name) {
@@ -52,25 +89,24 @@ How to use:
 
   try {
     const { script, inputs } = await getSnippet(name);
-    const replacements = await getInputs(inputs);
-    const templateRe = /\$\{([\s\S]+?)\}/g;
-    const code = script.replace(
-      templateRe,
-      (_, input) => replacements.get(input.trim()) || input
+    const replacements = await getInputs(inputs, options);
+    const keys = inputs.map((i) => i.name).join("|");
+    const matcher = new RegExp("\\$\\{\\s*?(" + keys + ")\\s*?\\}", "g");
+    const code = script.replace(matcher, (_, input) =>
+      replacements.get(input.trim())
     );
+
     const nodePath = process.argv[0];
     const hash = createHash("sha256").update(name).digest("hex");
     const tmpDir = process.env.TMPDIR || "/tmp";
     const filePath = `${tmpDir}/${hash + ".js"}`;
     const env = {
-      ...process.env,
       SNIPPETS_REGISTRY: "https://registry.snippets.run",
+      ...process.env,
     };
+
     await writeFile(filePath, code);
-    const p = spawn(nodePath, [filePath, ...process.argv.slice(3)], {
-      stdio: "inherit",
-      env,
-    });
+    const p = spawn(nodePath, [filePath, ...args], { stdio: "inherit", env });
     p.on("exit", (c) => process.exit(c));
   } catch (error) {
     process.stderr.write(String(error));
