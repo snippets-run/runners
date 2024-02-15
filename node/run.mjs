@@ -76,7 +76,31 @@ How to use:
   run                     Shows this message
   run <snippet-name>      Download and run <snippet-name>
 `);
-  process.exit(1);
+}
+
+function getCode(inputs, script, replacements) {
+  const keys = inputs.map((i) => i.name).join("|");
+  const matcher = new RegExp("\\$\\{\\s*?(" + keys + ")\\s*?\\}", "g");
+  return script.replace(matcher, (_, input) => replacements.get(input.trim()));
+}
+
+async function writeScript(name, code) {
+  const hash = createHash("sha256").update(name).digest("hex");
+  const tmpDir = process.env.TMPDIR || "/tmp";
+  const filePath = `${tmpDir}/${hash + ".mjs"}`;
+  await writeFile(filePath, code);
+  return filePath;
+}
+
+function runScript(filePath, args) {
+  const nodePath = process.argv[0];
+  const env = {
+    SNIPPETS_REGISTRY: "https://registry.snippets.run",
+    ...process.env,
+  };
+
+  const p = spawn(nodePath, [filePath, ...args], { stdio: "inherit", env });
+  p.on("exit", (c) => process.exit(c));
 }
 
 (async () => {
@@ -85,29 +109,16 @@ How to use:
 
   if (!name) {
     showHelp();
+    process.exit(1);
   }
 
   try {
     const { script, inputs } = await getSnippet(name);
     const replacements = await getInputs(inputs, options);
-    const keys = inputs.map((i) => i.name).join("|");
-    const matcher = new RegExp("\\$\\{\\s*?(" + keys + ")\\s*?\\}", "g");
-    const code = script.replace(matcher, (_, input) =>
-      replacements.get(input.trim())
-    );
+    const code = getCode(inputs, script, replacements);
+    const filePath = await writeScript(name, code);
 
-    const nodePath = process.argv[0];
-    const hash = createHash("sha256").update(name).digest("hex");
-    const tmpDir = process.env.TMPDIR || "/tmp";
-    const filePath = `${tmpDir}/${hash + ".js"}`;
-    const env = {
-      SNIPPETS_REGISTRY: "https://registry.snippets.run",
-      ...process.env,
-    };
-
-    await writeFile(filePath, code);
-    const p = spawn(nodePath, [filePath, ...args], { stdio: "inherit", env });
-    p.on("exit", (c) => process.exit(c));
+    runScript(filePath, args);
   } catch (error) {
     process.stderr.write(String(error));
     process.exit(1);
