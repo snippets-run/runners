@@ -1,0 +1,5 @@
+/run
+*.tar.gz
+*.exe
+dist/
+node_modules/
