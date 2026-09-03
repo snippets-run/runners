@@ -16,7 +16,7 @@ This document outlines the core architecture, execution lifecycle, design decisi
 Development proceeds in three phases: **CLI first**, then **registry server improvements**, finally **website** to integrate both.
 
 ### Phase 1 - Go CLI
-- `run` binary, built via `cmd/run/`, distributed by goreleaser for darwin/arm64+amd64 and linux/arm64+amd64.
+- `run` binary, built via `cmd/run/`, distributed by private CI for darwin/arm64+amd64 and linux/arm64+amd64.
 - Installation: curl|sh installer at `install.snippets.run`. Repointing the current legacy installer is release work still to do.
 
 ### Phase 2 - Registry Server
@@ -160,7 +160,7 @@ Response 200: binary tarball/stream of the commit's tree. .tar.gz only.
 
 - **Binary name:** `run` (binary installed as `go install github.com/snippets-run/runners/cmd/run@latest`).
 - **Module path:** `github.com/snippets-run/runners`.
-- **CI/Release:** goreleaser for cross-compilation: darwin/arm64+amd64, linux/arm64+amd64. Built as static binaries (`-ldflags "-s -w"`, `CGO_ENABLED=0`).
+- **CI/Release:** Every push to `main` triggers `/data/cloud/workflows/on/runners-release.yaml`. It tests the runner, cross-compiles darwin/arm64+amd64 and linux/arm64+amd64 static binaries, generates SHA-256 checksums, and publishes a commit-addressed GitHub release as the latest release.
 - **Installer:** `install.sh` downloads the matching GitHub Release asset, validates its SHA-256 checksum, and installs `run` to `$HOME/.local/bin` (or `$INSTALL_DIR`). `install.snippets.run` will be repointed from the legacy bash one-liner after the first release exists.
 - Go toolchain: 1.24+ required in CI + local development (pin a current stable, e.g., **1.24.x**). No runtime version requirement beyond 1.22 for stdlib compatibility.
 
