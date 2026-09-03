@@ -6,7 +6,7 @@ This document outlines the core architecture, execution lifecycle, design decisi
 
 ## Core Concepts
 
-* **Snippet Identifier:** `owner/name.<type>@reference` (e.g., `snippets/hello.sh@v1`, `owner/task.js@a1b2c3d`)
+* **Snippet Identifier:** `owner/name.<type>[@reference]` (e.g., `snippets/hello.sh@v1`, `owner/task.js@a1b2c3d`). If omitted, the reference defaults to `latest`.
 * **Immutable Type:** The repository suffix is authoritative metadata: `.sh` selects Bash, `.js` selects Node.js, and `.py` selects Python. A snippet cannot change type after creation.
 * **Registry-Driven Git:** The server handles Git operations. The CLI communicates via HTTP to resolve references and download point-in-time archives, avoiding local `git clone`.
 * **Go CLI Runner:** Written in Go for fast native execution (`syscall.Exec`), robust concurrency, and single-binary distribution on macOS/Linux without requiring users to install a runtime just for the CLI. Windows is explicitly unsupported and rejected at startup.
@@ -34,7 +34,7 @@ The CLI processes snippet execution in three sequential phases:
 
 ### 1. Resolution Phase
 
-When a user runs `run owner/hello.sh@v1`:
+When a user runs `run owner/hello.sh@v1` (or `run owner/hello.sh`, which defaults to `latest`):
 - The CLI performs an HTTP GET to `/api/resolve/{owner}/{repo}@{ref}` (where `{ref}` may be a branch, tag, or full commit hash).
 - The server resolves the ref to a specific Git commit hash and returns the authoritative snippet type:
   ```json

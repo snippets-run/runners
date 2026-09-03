@@ -17,7 +17,8 @@ import (
 var version = "dev"
 
 const usage = `Usage:
-  run <owner>/<name>.<type>@<ref> [--key=value ...]
+  run <owner>/<name>.<type>[@<ref>] [--key=value ...]
+  run create [--key=value ...]
   run cache status
   run cache clean
 
@@ -158,7 +159,11 @@ func cacheCommand(args []string) {
 }
 
 func parseInvocation(args []string) (invocation, error) {
-	owner, repo, ref, err := parseIdentifier(args[0])
+	identifier := args[0]
+	if identifier == "create" {
+		identifier = "snippets/create.sh@latest"
+	}
+	owner, repo, ref, err := parseIdentifier(identifier)
 	if err != nil {
 		return invocation{}, err
 	}
@@ -185,14 +190,19 @@ func parseInvocation(args []string) (invocation, error) {
 
 func parseIdentifier(value string) (owner, repo, ref string, err error) {
 	at := strings.LastIndex(value, "@")
-	if at <= 0 || at == len(value)-1 {
-		return "", "", "", fmt.Errorf("invalid snippet identifier %q; expected owner/repo@ref", value)
+	if at == -1 {
+		at = len(value)
+		ref = "latest"
+	} else if at <= 0 || at == len(value)-1 {
+		return "", "", "", fmt.Errorf("invalid snippet identifier %q; expected owner/repo[@ref]", value)
+	} else {
+		ref = value[at+1:]
 	}
 	path := strings.Split(value[:at], "/")
 	if len(path) != 2 || !validPathPart(path[0]) || !validPathPart(path[1]) {
-		return "", "", "", fmt.Errorf("invalid snippet identifier %q; expected owner/repo@ref", value)
+		return "", "", "", fmt.Errorf("invalid snippet identifier %q; expected owner/repo[@ref]", value)
 	}
-	return path[0], path[1], value[at+1:], nil
+	return path[0], path[1], ref, nil
 }
 
 func validPathPart(value string) bool {

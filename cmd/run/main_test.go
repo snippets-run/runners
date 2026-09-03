@@ -24,6 +24,16 @@ func TestParseIdentifier(t *testing.T) {
 	}
 }
 
+func TestParseIdentifierDefaultsRefToLatest(t *testing.T) {
+	owner, repo, ref, err := parseIdentifier("acme/example.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if owner != "acme" || repo != "example.sh" || ref != "latest" {
+		t.Fatalf("got %q, %q, %q", owner, repo, ref)
+	}
+}
+
 func TestParseIdentifierRejectsUnsafePath(t *testing.T) {
 	if _, _, _, err := parseIdentifier("../repo@main"); err == nil {
 		t.Fatal("expected error")
@@ -36,6 +46,19 @@ func TestParseInvocationInputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	if call.inputs["NAME"] != "Alice" || call.inputs["COUNT"] != "2" {
+		t.Fatalf("unexpected inputs: %#v", call.inputs)
+	}
+}
+
+func TestParseInvocationAliasesCreate(t *testing.T) {
+	call, err := parseInvocation([]string{"create", "--name=example", "--type=sh"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if call.owner != "snippets" || call.repo != "create.sh" || call.ref != "latest" {
+		t.Fatalf("unexpected alias target: %#v", call)
+	}
+	if call.inputs["NAME"] != "example" || call.inputs["TYPE"] != "sh" {
 		t.Fatalf("unexpected inputs: %#v", call.inputs)
 	}
 }
