@@ -11,7 +11,7 @@ type Runtime string
 const (
 	Node   Runtime = "node"
 	Python Runtime = "python"
-	Shell  Runtime = "shell"
+	Shell  Runtime = "bash"
 )
 
 type Entrypoint struct {
@@ -19,45 +19,59 @@ type Entrypoint struct {
 	File    string
 }
 
-// Find applies only the documented, root-level entrypoint conventions.
-func Find(dir string) (Entrypoint, error) {
-	if exists(filepath.Join(dir, "package.json")) {
-		return first(dir, Node, "index.js", "main.js")
+// Find applies the single entrypoint convention encoded by the repository suffix.
+func Find(dir, repo string) (Entrypoint, error) {
+	runtime, err := FromRepository(repo)
+	if err != nil {
+		return Entrypoint{}, err
 	}
-	if exists(filepath.Join(dir, "pyproject.toml")) || exists(filepath.Join(dir, "requirements.txt")) {
-		return first(dir, Python, "main.py", "__main__.py")
+	switch filepath.Ext(repo) {
+	case ".js":
+		return findOne(dir, runtime, "index.js", "index.mjs")
+	case ".py":
+		return find(dir, runtime, "main.py")
+	case ".sh":
+		return find(dir, runtime, "main.sh")
+	default:
+		return Entrypoint{}, fmt.Errorf("unsupported repository suffix")
 	}
-
-	candidates := []Entrypoint{}
-	for _, runtime := range []Runtime{Node, Python, Shell} {
-		files := map[Runtime][]string{
-			Node:   {"index.js", "main.js"},
-			Python: {"main.py", "__main__.py"},
-			Shell:  {"main.sh", "run.sh"},
-		}[runtime]
-		for _, name := range files {
-			if exists(filepath.Join(dir, name)) {
-				candidates = append(candidates, Entrypoint{Runtime: runtime, File: name})
-				break
-			}
-		}
-	}
-	if len(candidates) == 1 {
-		return candidates[0], nil
-	}
-	if len(candidates) > 1 {
-		return Entrypoint{}, fmt.Errorf("ambiguous entrypoint; add package.json, pyproject.toml, or requirements.txt to select a runtime")
-	}
-	return Entrypoint{}, fmt.Errorf("no entrypoint found; expected index.js/main.js, main.py/__main__.py, or main.sh/run.sh")
 }
 
-func first(dir string, runtime Runtime, names ...string) (Entrypoint, error) {
-	for _, name := range names {
-		if exists(filepath.Join(dir, name)) {
-			return Entrypoint{Runtime: runtime, File: name}, nil
-		}
+func FromRepository(repo string) (Runtime, error) {
+	switch filepath.Ext(repo) {
+	case ".js":
+		return Node, nil
+	case ".py":
+		return Python, nil
+	case ".sh":
+		return Shell, nil
+	default:
+		return "", fmt.Errorf("repository name must end in .sh, .js, or .py")
 	}
-	return Entrypoint{}, fmt.Errorf("%s runtime detected but no %s entrypoint found", runtime, runtime)
+}
+
+func findOne(dir string, runtime Runtime, names ...string) (Entrypoint, error) {
+	var found string
+	for _, name := range names {
+		if !exists(filepath.Join(dir, name)) {
+			continue
+		}
+		if found != "" {
+			return Entrypoint{}, fmt.Errorf("%s snippet has multiple entrypoints: %s and %s", runtime, found, name)
+		}
+		found = name
+	}
+	if found == "" {
+		return Entrypoint{}, fmt.Errorf("%s snippet requires index.js or index.mjs", runtime)
+	}
+	return Entrypoint{Runtime: runtime, File: found}, nil
+}
+
+func find(dir string, runtime Runtime, name string) (Entrypoint, error) {
+	if exists(filepath.Join(dir, name)) {
+		return Entrypoint{Runtime: runtime, File: name}, nil
+	}
+	return Entrypoint{}, fmt.Errorf("%s snippet requires %s", runtime, name)
 }
 
 func exists(path string) bool {

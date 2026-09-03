@@ -17,7 +17,7 @@ import (
 var version = "dev"
 
 const usage = `Usage:
-  run <owner>/<repo>@<ref> [--key=value ...]
+  run <owner>/<name>.<type>@<ref> [--key=value ...]
   run cache status
   run cache clean
 
@@ -27,10 +27,11 @@ Set SNIPPET_REGISTRY_URL to override the registry URL.
 `
 
 type invocation struct {
-	owner  string
-	repo   string
-	ref    string
-	inputs map[string]string
+	owner   string
+	repo    string
+	ref     string
+	runtime discover.Runtime
+	inputs  map[string]string
 }
 
 func main() {
@@ -78,6 +79,9 @@ func main() {
 	if !validCommit(resolution.Commit) {
 		fail(1, "registry returned an invalid commit")
 	}
+	if resolution.Type != string(call.runtime) {
+		fail(1, "registry returned type %q for %s", resolution.Type, call.repo)
+	}
 
 	snippetDir := cache.SnippetDir(cacheRoot, call.owner, call.repo, resolution.Commit)
 	if !cache.Ready(snippetDir) {
@@ -86,7 +90,7 @@ func main() {
 		}
 	}
 
-	entrypoint, err := discover.Find(snippetDir)
+	entrypoint, err := discover.Find(snippetDir, call.repo)
 	if err != nil {
 		fail(2, "%v", err)
 	}
@@ -158,6 +162,10 @@ func parseInvocation(args []string) (invocation, error) {
 	if err != nil {
 		return invocation{}, err
 	}
+	runtime, err := discover.FromRepository(repo)
+	if err != nil {
+		return invocation{}, err
+	}
 	inputs := make(map[string]string)
 	for _, arg := range args[1:] {
 		if arg == "--offline" {
@@ -172,7 +180,7 @@ func parseInvocation(args []string) (invocation, error) {
 		}
 		inputs[strings.ToUpper(parts[0])] = parts[1]
 	}
-	return invocation{owner: owner, repo: repo, ref: ref, inputs: inputs}, nil
+	return invocation{owner: owner, repo: repo, ref: ref, runtime: runtime, inputs: inputs}, nil
 }
 
 func parseIdentifier(value string) (owner, repo, ref string, err error) {

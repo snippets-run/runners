@@ -16,6 +16,7 @@ const DefaultURL = "https://registry.snippets.run"
 type Resolution struct {
 	Owner  string `json:"owner"`
 	Repo   string `json:"repo"`
+	Type   string `json:"type"`
 	Ref    string `json:"ref"`
 	Commit string `json:"commit"`
 }
@@ -67,6 +68,9 @@ func (c *Client) Resolve(ctx context.Context, owner, repo, ref string) (Resoluti
 	}
 	if resolution.Commit == "" {
 		return Resolution{}, fmt.Errorf("resolve response has no commit")
+	}
+	if resolution.Type == "" {
+		return Resolution{}, fmt.Errorf("resolve response has no snippet type")
 	}
 	return resolution, nil
 }

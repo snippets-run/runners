@@ -15,11 +15,11 @@ import (
 )
 
 func TestParseIdentifier(t *testing.T) {
-	owner, repo, ref, err := parseIdentifier("acme/example@release/v1")
+	owner, repo, ref, err := parseIdentifier("acme/example.sh@release/v1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if owner != "acme" || repo != "example" || ref != "release/v1" {
+	if owner != "acme" || repo != "example.sh" || ref != "release/v1" {
 		t.Fatalf("got %q, %q, %q", owner, repo, ref)
 	}
 }
@@ -31,7 +31,7 @@ func TestParseIdentifierRejectsUnsafePath(t *testing.T) {
 }
 
 func TestParseInvocationInputs(t *testing.T) {
-	call, err := parseInvocation([]string{"acme/example@v1", "--name=Alice", "--count=2"})
+	call, err := parseInvocation([]string{"acme/example.sh@v1", "--name=Alice", "--count=2"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,8 +41,14 @@ func TestParseInvocationInputs(t *testing.T) {
 }
 
 func TestParseInvocationRejectsBareArguments(t *testing.T) {
-	if _, err := parseInvocation([]string{"acme/example@v1", "value"}); err == nil {
+	if _, err := parseInvocation([]string{"acme/example.sh@v1", "value"}); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestParseInvocationRequiresTypeSuffix(t *testing.T) {
+	if _, err := parseInvocation([]string{"acme/example@v1"}); err == nil {
+		t.Fatal("expected missing suffix error")
 	}
 }
 
@@ -63,7 +69,7 @@ func TestEnvironmentOverridesExistingInput(t *testing.T) {
 func TestPrepareDownloadsAndAtomicallyCachesSnippet(t *testing.T) {
 	archive := tarGz(t, "main.sh", "echo hello")
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/api/download/acme/example@a1b2c3d4" {
+		if request.URL.Path != "/api/download/acme/example.sh@a1b2c3d4" {
 			http.NotFound(response, request)
 			return
 		}
@@ -75,8 +81,8 @@ func TestPrepareDownloadsAndAtomicallyCachesSnippet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := filepath.Join(t.TempDir(), "acme", "example", "a1b2c3d4")
-	call := invocation{owner: "acme", repo: "example"}
+	dir := filepath.Join(t.TempDir(), "acme", "example.sh", "a1b2c3d4")
+	call := invocation{owner: "acme", repo: "example.sh"}
 	if err := prepare(context.Background(), client, call, "a1b2c3d4", dir); err != nil {
 		t.Fatal(err)
 	}

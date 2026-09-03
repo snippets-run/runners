@@ -6,29 +6,24 @@ This document outlines the core architecture, execution lifecycle, design decisi
 
 ## Core Concepts
 
-* **Snippet Identifier:** `owner/repo@reference` (e.g., `octocat/hello-world@v1`, `owner/repo@a1b2c3d`)
+* **Snippet Identifier:** `owner/name.<type>@reference` (e.g., `snippets/hello.sh@v1`, `owner/task.js@a1b2c3d`)
+* **Immutable Type:** The repository suffix is authoritative metadata: `.sh` selects Bash, `.js` selects Node.js, and `.py` selects Python. A snippet cannot change type after creation.
 * **Registry-Driven Git:** The server handles Git operations. The CLI communicates via HTTP to resolve references and download point-in-time archives, avoiding local `git clone`.
-* **Go CLI Runner:** Written in Go for fast native execution (`syscall.Exec`), robust concurrency, and single-binary distribution on macOS/Linux without requiring users to install a runtime just for the CLI. Windows is explicitly unsupported in this iteration; unsupported OSes are handled by compile-time guards + explicit panics at runtime.
+* **Go CLI Runner:** Written in Go for fast native execution (`syscall.Exec`), robust concurrency, and single-binary distribution on macOS/Linux without requiring users to install a runtime just for the CLI. Windows is explicitly unsupported and rejected at startup.
 
 ## Architecture & Roadmap
 
 Development proceeds in three phases: **CLI first**, then **registry server improvements**, finally **website** to integrate both.
 
-### Phase 1 - Go CLI (current work)
+### Phase 1 - Go CLI
 - `run` binary, built via `cmd/run/`, distributed by goreleaser for darwin/arm64+amd64 and linux/arm64+amd64.
 - Installation: curl|sh installer at `install.snippets.run`. Repointing the current legacy installer is release work still to do.
 
 ### Phase 2 - Registry Server
-- A new git-backed registry implementing `/api/resolve` and `/api/download`.
-- The current server (`registry.snippets.run`) uses a legacy single-file KV model (`/s/:platform/:name` with no Git). Both run in parallel during transition until the old endpoints are fully retired.
+- The git-backed registry implements `/api/resolve` and `/api/download` and is deployed at `registry.snippets.run`.
+- Its source and Docker image are maintained in the separate `snippets-run/registry` repository.
 
-The implementation is in `server/`. It has no runtime dependencies beyond Node.js and `git`.
-
-```sh
-SNIPPET_REPOSITORIES_PATH=/repositories node server/src/server.mjs
-```
-
-Repositories must be available as `$SNIPPET_REPOSITORIES_PATH/<owner>/<repo>`, and may be bare repositories or working-tree repositories. The image in `server/Dockerfile` expects the repository root to be mounted read-only at `/repositories`.
+Repositories are available to the registry as `$SNIPPET_REPOSITORIES_PATH/<owner>/<name>.<type>` and may be bare or working-tree repositories.
 
 ### Phase 3 - Web App
 - `snippets.run` (Vue SPA) updated to call both the new registry API and the CLI runner interface. Legacy `/index`, `/search`, `/snippets/...` must survive long enough for migration.
@@ -39,13 +34,14 @@ The CLI processes snippet execution in three sequential phases:
 
 ### 1. Resolution Phase
 
-When a user runs `run owner/repo@v1`:
+When a user runs `run owner/hello.sh@v1`:
 - The CLI performs an HTTP GET to `/api/resolve/{owner}/{repo}@{ref}` (where `{ref}` may be a branch, tag, or full commit hash).
-- The server resolves the ref → a specific Git commit hash. Response:
+- The server resolves the ref to a specific Git commit hash and returns the authoritative snippet type:
   ```json
   {
     "owner": "octocat",
-    "repo": "hello-world",
+    "repo": "hello-world.sh",
+    "type": "bash",
     "ref": "v1",
     "commit": "a1b2c3d4"
   }
@@ -61,7 +57,7 @@ When a user runs `run owner/repo@v1`:
 
 Before running code, the CLI ensures the snippet and its dependencies are on disk.
 
-* **Cache Check:** If `$SNIPPET_CACHE_PATH/{owner}/{repo}/{commit}/` exists, skip download entirely.
+* **Cache Check:** If `$SNIPPET_CACHE_PATH/{owner}/{repo}/{commit}/` exists and is non-empty, skip download entirely.
 * **Atomic Download + Extraction:** Streams the `.tar.gz` into `{owner}/{repo}/{commit}.tmp.{pid}`, then performs an atomic `os.Rename` to the final directory. No partial states leak if interrupted mid-extraction.
 
 ### 3. Run Phase (Process Replacement)
@@ -74,34 +70,33 @@ Once prepped, the CLI executes the snippet:
 
 Supported runtimes per entrypoint:
 
-| Runtime    | Discovery                     | Dependencies                       | Notes                                           |
-|------------|-------------------------------|------------------------------------|-------------------------------------------------|
-| Node.js    | `package.json`, `.js` files  | `pnpm install --no-frozen-lockfile`| Hard error if `pnpm` is missing from PATH       |
-| Shell      | `main.sh`, `run.sh`          | none                               | Executed via `bash`                             |
-| Python     | `pyproject.toml`, `.py` files| none (manual pip install for user) | Executed via `python3` only                     |
+| Suffix | Runtime | Entrypoint | Dependencies | Notes |
+|--------|---------|------------|--------------|-------|
+| `.js` | Node.js | exactly one of `index.js` or `index.mjs` | `pnpm install --no-frozen-lockfile` when `package.json` exists | Hard error if `pnpm` is missing |
+| `.sh` | Bash | `main.sh` | none | Executed via `bash` |
+| `.py` | Python | `main.py` | none | Executed via `python3`; dependency installation is deferred |
 
-Unsupported snippets (detected but no handler exists) return a clear error message listing what was found and that support is not yet implemented.
+Unsupported repository suffixes and mismatched registry types are rejected before execution.
 
-### Dependency Manifest Detection Order
-Runtime selection uses root-level manifests where present: `package.json` selects Node.js; `requirements.txt` or `pyproject.toml` selects Python. If more than one runtime has an explicit entrypoint and no manifest selects one, the runner reports an ambiguity error.
+The runner never infers runtime from repository contents. It validates that the registry-provided type matches the repository suffix, then uses the single entrypoint assigned to that type. `package.json` controls Node.js dependency installation only.
 
 ## Input Management
 
 * All user-provided flags (`--key=value`) are passed as environment variables with an `INPUTS_` prefix.
-  * Example: `run owner/greet@latest --name="Alice"` sets `INPUTS_NAME=Alice`.
+  * Example: `run owner/greet.sh@latest --name="Alice"` sets `INPUTS_NAME=Alice`.
 * The CLI does not validate, prompt for, or request input declarations from the author — it simply sets and passes whatever flags are received. Prompting/validation via a snippet manifest is possible in future iterations (see the `snippet.json` section).
 
 ## Entrypoint Discovery
 
-Since snippets can contain multiple files, entrypoint discovery follows an **explicit-only** model — no implicit "single file" fallback to avoid unpredictable behaviour. The CLI scans for and returns the first found match for each supported runtime in this priority order:
+Entrypoint discovery follows an **explicit-only** model with no arbitrary single-file fallback:
 
-| Runtime | Explicit Entry Points (in order)     | Execution Command              |
-|---------|--------------------------------------|-------------------------------|
-| Node.js | `index.js`, `main.js`               | `node index.js` / `node main.js`  |
-| Python  | `main.py`, `__main__.py`            | `python3 main.py` / `python3 __main__.py` |
-| Shell   | `main.sh`, `run.sh`                 | `bash main.sh` / `bash run.sh`      |
+| Runtime | Entrypoint | Execution Command |
+|---------|------------|-------------------|
+| Node.js | exactly one of `index.js` or `index.mjs` | `node <entrypoint>` |
+| Python | `main.py` | `python3 main.py` |
+| Bash | `main.sh` | `bash main.sh` |
 
-When no manifest is present, exactly one supported explicit entrypoint is required. Multiple runtimes are an ambiguity error. The snippet author must explicitly provide one of the expected file names; there is no fallback to arbitrary executable files.
+Files for other runtimes are ignored. Bash and Python have one required entrypoint. Node accepts either `index.js` or `index.mjs`, but rejects a repository containing both.
 
 ## Local Cache Management
 
@@ -122,7 +117,8 @@ Accept: application/json
 Response 200:
 {
     "owner": "octocat",
-    "repo": "hello-world",
+    "repo": "hello-world.sh",
+    "type": "bash",
     "ref": "v1",
     "commit": "a1b2c3d"
 }
@@ -148,7 +144,7 @@ Response 200: binary tarball/stream of the commit's tree. .tar.gz only.
 - User-Agent header: `run/<version>` (server can use for analytics).
 - Timeout: 10-second resolution phase / 120-second total download phase.
 - No retries in v1. Fail on first attempt.
-- Redirect handling: follow redirects by default with a cap of 5 hops.
+- Redirect handling: Go's standard HTTP client follows redirects with its default 10-hop limit.
 
 ## Input Management Rules
 
@@ -177,15 +173,13 @@ runners/
 ├── cmd/run/                  # Main binary entrypoint (CLI parsing and CLI execution)
 │   └── main.go               # Main() bootstrap, dispatches via the registry & runner packages
 ├── internal/                 # Internal non-exported packages (all runtime logic)
-│   ├── discover/             # Entrypoint discovery + manifest detection
+│   ├── discover/             # Suffix validation and entrypoint selection
 │   ├── cache/                # Cache paths, status, and cleaning
 │   ├── extract/              # Safe tar.gz extraction
 │   ├── registry/             # Resolve/download HTTP client
 │   └── run/                  # Dependency preparation + syscall.Exec
-├── server/                    # Git-backed Node.js registry and Docker image
 ├── .goreleaser.yaml          # goreleaser config (cross-build + publish to GitHub Releases)
-├── go.mod                    # Go module definition
-└── go.sum                    # Module hashes
+└── go.mod                    # Go module definition
 ```
 
 ## Future Iteration Work

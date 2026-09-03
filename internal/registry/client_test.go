@@ -11,10 +11,10 @@ import (
 func TestResolveAndDownload(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
-		case "/api/resolve/acme/example@v1":
+		case "/api/resolve/acme/example.sh@v1":
 			response.Header().Set("Content-Type", "application/json")
-			_, _ = response.Write([]byte(`{"owner":"acme","repo":"example","ref":"v1","commit":"a1b2c3d4"}`))
-		case "/api/download/acme/example@a1b2c3d4":
+			_, _ = response.Write([]byte(`{"owner":"acme","repo":"example.sh","type":"bash","ref":"v1","commit":"a1b2c3d4"}`))
+		case "/api/download/acme/example.sh@a1b2c3d4":
 			response.Header().Set("Content-Type", "application/gzip")
 			_, _ = response.Write([]byte("archive"))
 		default:
@@ -27,11 +27,11 @@ func TestResolveAndDownload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolution, err := client.Resolve(context.Background(), "acme", "example", "v1")
+	resolution, err := client.Resolve(context.Background(), "acme", "example.sh", "v1")
 	if err != nil || resolution.Commit != "a1b2c3d4" {
 		t.Fatalf("got %#v, %v", resolution, err)
 	}
-	archive, err := client.Download(context.Background(), "acme", "example", resolution.Commit)
+	archive, err := client.Download(context.Background(), "acme", "example.sh", resolution.Commit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestResolveUsesJSONErrorMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = client.Resolve(context.Background(), "acme", "missing", "v1")
+	_, err = client.Resolve(context.Background(), "acme", "missing.sh", "v1")
 	if err == nil || err.Error() != "registry returned 404: snippet not found" {
 		t.Fatalf("unexpected error: %v", err)
 	}
