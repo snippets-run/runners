@@ -7,6 +7,19 @@ import (
 	"path/filepath"
 )
 
+const directoryName = "snippets.run"
+
+func Root(override string) (string, error) {
+	if override != "" {
+		return filepath.Clean(override), nil
+	}
+	base, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve user cache directory: %w", err)
+	}
+	return filepath.Join(base, directoryName), nil
+}
+
 func SnippetDir(root, owner, repo, commit string) string {
 	return filepath.Join(root, owner, repo, commit)
 }

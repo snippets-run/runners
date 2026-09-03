@@ -3,7 +3,7 @@
 set -eu
 
 repository="https://github.com/snippets-run/runners/releases/latest/download"
-install_dir="${INSTALL_DIR:-$HOME/.local/bin}"
+install_dir="${INSTALL_DIR:-/usr/local/bin}"
 
 case "$(uname -s)" in
   Linux) os="linux" ;;
@@ -60,6 +60,15 @@ if [ "$actual" != "$expected" ]; then
 fi
 
 tar -xzf "$temporary/$archive" -C "$temporary"
-mkdir -p "$install_dir"
-install -m 0755 "$temporary/run" "$install_dir/run"
+
+if mkdir -p "$install_dir" 2>/dev/null && [ -w "$install_dir" ]; then
+  install -m 0755 "$temporary/run" "$install_dir/run"
+elif command -v sudo >/dev/null 2>&1; then
+  sudo mkdir -p "$install_dir"
+  sudo install -m 0755 "$temporary/run" "$install_dir/run"
+else
+  printf '%s\n' "error: $install_dir is not writable and sudo is unavailable; set INSTALL_DIR to a writable path" >&2
+  exit 1
+fi
+
 printf '%s\n' "Installed run to $install_dir/run"

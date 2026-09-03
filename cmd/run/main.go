@@ -22,7 +22,7 @@ const usage = `Usage:
   run cache clean
 
 Inputs are exposed to snippets as INPUTS_<KEY> environment variables.
-Set SNIPPET_CACHE_PATH to the directory used for downloaded snippets.
+Set SNIPPET_CACHE_PATH to override the OS-native cache directory.
 Set SNIPPET_REGISTRY_URL to override the registry URL.
 `
 
@@ -60,9 +60,9 @@ func main() {
 	if err != nil {
 		fail(2, "%v", err)
 	}
-	cacheRoot := os.Getenv("SNIPPET_CACHE_PATH")
-	if cacheRoot == "" {
-		fail(2, "SNIPPET_CACHE_PATH is not set")
+	cacheRoot, err := cache.Root(os.Getenv("SNIPPET_CACHE_PATH"))
+	if err != nil {
+		fail(1, "%v", err)
 	}
 	client, err := registry.New(os.Getenv("SNIPPET_REGISTRY_URL"), version)
 	if err != nil {
@@ -137,9 +137,9 @@ func cacheCommand(args []string) {
 	if len(args) != 1 {
 		fail(2, "usage: run cache status|clean")
 	}
-	root := os.Getenv("SNIPPET_CACHE_PATH")
-	if root == "" {
-		fail(2, "SNIPPET_CACHE_PATH is not set")
+	root, err := cache.Root(os.Getenv("SNIPPET_CACHE_PATH"))
+	if err != nil {
+		fail(1, "%v", err)
 	}
 	switch args[0] {
 	case "status":

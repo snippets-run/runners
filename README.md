@@ -17,7 +17,7 @@ Development proceeds in three phases: **CLI first**, then **registry server impr
 
 ### Phase 1 - Go CLI
 - `run` binary, built via `cmd/run/`, distributed by private CI for darwin/arm64+amd64 and linux/arm64+amd64.
-- Installation: curl|sh installer at `install.snippets.run`. Repointing the current legacy installer is release work still to do.
+- Installation: `curl -fsSL https://install.snippets.run | sh` installs the latest release to `/usr/local/bin/run`.
 
 ### Phase 2 - Registry Server
 - The git-backed registry implements `/api/resolve` and `/api/download` and is deployed at `registry.snippets.run`.
@@ -100,7 +100,7 @@ Files for other runtimes are ignored. Bash and Python have one required entrypoi
 
 ## Local Cache Management
 
-* **Cache Path:** Configured entirely via `$SNIPPET_CACHE_PATH` environment variable with no built-in default (if unset, the CLI errors out clearly). Users set it explicitly before invoking `run`.
+* **Cache Path:** Defaults to the OS-native user cache directory plus `snippets.run`: `$XDG_CACHE_HOME/snippets.run` or `~/.cache/snippets.run` on Linux, and `~/Library/Caches/snippets.run` on macOS. `$SNIPPET_CACHE_PATH` overrides it.
 * **Structure:** All snippets are saved under `{cache}/<owner>/<repo>/<commit>/`. A `refs.json` index is planned for the future offline implementation.
 * Reserved root-level commands:
   * `run cache status` → prints total disk space used by `$SNIPPET_CACHE_PATH`. No flags; always human-readable.
@@ -161,7 +161,7 @@ Response 200: binary tarball/stream of the commit's tree. .tar.gz only.
 - **Binary name:** `run` (binary installed as `go install github.com/snippets-run/runners/cmd/run@latest`).
 - **Module path:** `github.com/snippets-run/runners`.
 - **CI/Release:** Every push to `main` triggers `/data/cloud/workflows/on/runners-release.yaml`. It tests the runner, cross-compiles darwin/arm64+amd64 and linux/arm64+amd64 static binaries, generates SHA-256 checksums, and publishes a `build-<commit>` GitHub release as the latest release.
-- **Installer:** `install.sh` downloads the matching GitHub Release asset, validates its SHA-256 checksum, and installs `run` to `$HOME/.local/bin` (or `$INSTALL_DIR`). `install.snippets.run` will be repointed from the legacy bash one-liner after the first release exists.
+- **Installer:** `install.sh` downloads the matching GitHub Release asset, validates its SHA-256 checksum, and installs `run` to `/usr/local/bin` using `sudo` when required. Set `$INSTALL_DIR` to override the destination.
 - Go toolchain: 1.24+ required in CI + local development (pin a current stable, e.g., **1.24.x**). No runtime version requirement beyond 1.22 for stdlib compatibility.
 
 ## Repository Layout

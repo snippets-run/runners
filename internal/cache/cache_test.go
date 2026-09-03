@@ -6,6 +6,30 @@ import (
 	"testing"
 )
 
+func TestRootUsesOverride(t *testing.T) {
+	root, err := Root("custom/../cache")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if root != "cache" {
+		t.Fatalf("unexpected root: %q", root)
+	}
+}
+
+func TestRootUsesUserCacheDirectory(t *testing.T) {
+	root, err := Root("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, err := os.UserCacheDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if root != filepath.Join(base, directoryName) {
+		t.Fatalf("unexpected root: %q", root)
+	}
+}
+
 func TestStatusAndClean(t *testing.T) {
 	root := t.TempDir()
 	file := filepath.Join(root, "owner", "repo", "commit", "main.sh")
