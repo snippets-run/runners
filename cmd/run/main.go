@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 
@@ -56,6 +57,10 @@ func main() {
 		cacheCommand(args[1:])
 		return
 	}
+	if args[0] == "create" {
+		openCreatePage()
+		return
+	}
 
 	call, err := parseInvocation(args)
 	if err != nil {
@@ -100,6 +105,20 @@ func main() {
 	}
 	if err := runner.Exec(snippetDir, entrypoint, environment(call.inputs)); err != nil {
 		fail(1, "run snippet: %v", err)
+	}
+}
+
+func openCreatePage() {
+	url := os.Getenv("SNIPPET_WEB_URL")
+	if url == "" {
+		url = "https://snippets.run/#/create"
+	}
+	command := "xdg-open"
+	if runtime.GOOS == "darwin" {
+		command = "open"
+	}
+	if err := exec.Command(command, url).Run(); err != nil {
+		fail(1, "open create page: %v", err)
 	}
 }
 
@@ -160,9 +179,6 @@ func cacheCommand(args []string) {
 
 func parseInvocation(args []string) (invocation, error) {
 	identifier := args[0]
-	if identifier == "create" {
-		identifier = "snippets/create.sh@latest"
-	}
 	owner, repo, ref, err := parseIdentifier(identifier)
 	if err != nil {
 		return invocation{}, err

@@ -50,19 +50,6 @@ func TestParseInvocationInputs(t *testing.T) {
 	}
 }
 
-func TestParseInvocationAliasesCreate(t *testing.T) {
-	call, err := parseInvocation([]string{"create", "--name=example", "--type=sh"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if call.owner != "snippets" || call.repo != "create.sh" || call.ref != "latest" {
-		t.Fatalf("unexpected alias target: %#v", call)
-	}
-	if call.inputs["NAME"] != "example" || call.inputs["TYPE"] != "sh" {
-		t.Fatalf("unexpected inputs: %#v", call.inputs)
-	}
-}
-
 func TestParseInvocationRejectsBareArguments(t *testing.T) {
 	if _, err := parseInvocation([]string{"acme/example.sh@v1", "value"}); err == nil {
 		t.Fatal("expected error")
